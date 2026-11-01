@@ -34,10 +34,34 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session || !supabase) { setProfile(null); return; }
-    supabase.from('employees').select('*, branches(name)').eq('user_id', session.user.id).single()
-      .then(({data,error}) => { if(error) setStatus(error.message); else {setProfile(data); setBranch(data.branches?.name || 'YOKI Coffee');} });
-  }, [session]);
+  if (!session || !supabase) {
+    setProfile(null);
+    return;
+  }
+
+  supabase
+    .from('employees')
+    .select('*, branches(name)')
+    .eq('user_id', session.user.id)
+    .maybeSingle()
+    .then(({ data, error }) => {
+      if (error) {
+        setProfile(null);
+        setStatus(error.message);
+        return;
+      }
+
+      if (!data) {
+        setProfile(null);
+        setStatus('Employee profile not found. Please contact admin.');
+        return;
+      }
+
+      setProfile(data);
+      setBranch(data.branches?.name || 'YOKI Coffee');
+      setStatus('');
+    });
+}, [session]);
 
   useEffect(() => {
     if (!profile || !supabase) return;
