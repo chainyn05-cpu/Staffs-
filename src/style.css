@@ -7,3 +7,95 @@
   border-radius: 18px; text-align: center;
 }
 .shared-qr-card svg { max-width: 100%; height: auto; }
+
+
+/* Mobile-first layout improvements */
+@media (max-width: 800px) {
+  .app { display: block; min-height: 100dvh; }
+  .sidebar {
+    position: fixed;
+    z-index: 50;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: auto;
+    min-height: 66px;
+    padding: 7px max(8px, env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 28px #10182720;
+  }
+  .brand, .side-bottom { display: none; }
+  .sidebar nav {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+    gap: 4px;
+    width: 100%;
+  }
+  .sidebar nav button,
+  .sidebar nav button:not(.active) {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 50px;
+    padding: 6px 3px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+  }
+  .sidebar nav button svg { width: 19px; height: 19px; min-width: 19px; }
+  .content {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 20px 14px calc(92px + env(safe-area-inset-bottom));
+  }
+  header { align-items: flex-start; margin-bottom: 20px; }
+  header h1 { font-size: clamp(21px, 6vw, 27px); overflow-wrap: anywhere; }
+  .user { font-size: 12px; max-width: 42%; overflow-wrap: anywhere; }
+  .eyebrow { letter-spacing: 1px; font-size: 9px; }
+  .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .stat { min-width: 0; padding: 12px 9px; gap: 7px; flex-direction: column; align-items: flex-start; }
+  .stat>span { padding: 8px; }
+  .stat small { font-size: 10px; }
+  .stat b { font-size: clamp(12px, 3.5vw, 16px); overflow-wrap: anywhere; }
+  .scan-panel { padding: 18px; gap: 12px; }
+  .scan-panel h2 { font-size: 17px; line-height: 1.45; }
+  .scan-panel .muted { font-size: 12px; }
+  .scan-panel button { max-width: 100%; justify-content: center; }
+  .panel:not(.scan-panel) { padding: 16px; margin-bottom: 14px; }
+  .section-head { align-items: flex-start; flex-wrap: wrap; }
+  .section-head input { max-width: 100%; min-width: 0; }
+  .table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 8px;
+  }
+  .table-wrap table { min-width: 620px; }
+  .table-wrap th, .table-wrap td { padding: 11px 9px; font-size: 12px; }
+  #qr-reader { width: 100% !important; max-width: 100%; overflow: hidden; }
+  #qr-reader video { width: 100% !important; height: auto !important; object-fit: cover; }
+  #qr-reader__scan_region { min-height: 180px; }
+  #qr-reader__dashboard { padding: 8px 0; }
+  #qr-reader__dashboard button, #qr-reader button { min-height: 40px; }
+  .shared-qr-card { width: 100%; padding: 16px; }
+  .shared-qr-card svg { width: min(280px, 100%); }
+  .payroll-total { gap: 10px; padding: 15px; flex-wrap: wrap; }
+  .payroll-total strong { font-size: 22px; }
+  footer { padding: 18px 0 4px; }
+}
+@media (max-width: 380px) {
+  .content { padding-left: 10px; padding-right: 10px; }
+  .stats { grid-template-columns: 1fr; }
+  .stat { flex-direction: row; align-items: center; }
+  .sidebar nav button, .sidebar nav button:not(.active) { font-size: 9px; }
+  .user { max-width: 38%; }
+}
