@@ -99,3 +99,13 @@
   .sidebar nav button, .sidebar nav button:not(.active) { font-size: 9px; }
   .user { max-width: 38%; }
 }
+
+.camera-actions { display:flex; justify-content:center; margin:12px 0; }
+.camera-actions button { min-height:42px; }
+#qr-reader video { object-fit:cover !important; }
+
+/* QR scanner reliability and mobile sizing */
+#qr-reader { width: 100%; max-width: 520px; margin: 0 auto; }
+#qr-reader video { width: 100% !important; object-fit: cover; }
+#qr-reader__scan_region { min-height: 220px; }
+#qr-reader__dashboard { padding: 10px 0; }
