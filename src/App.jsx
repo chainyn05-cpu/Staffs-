@@ -176,7 +176,7 @@ export default function App() {
         {sharedQrPayload&&<div className="shared-qr-card">
           <QRCodeSVG value={sharedQrPayload} size={280} level="H" includeMargin />
           <p><b>YOKI Coffee Shared QR</b></p>
-          <p className="muted">ផុតកំណត់៖ {new Date(sharedQrExpiresAt).toLocaleString()}</p>
+          <p className="muted">សុពលភាព៖ រហូតដល់ Admin ប្តូរ QR</p>
           <p className="muted">បង្ហាញ QR នេះនៅហាង។ បុគ្គលិក Login ដោយ Employee ID + PIN នៅលើទូរស័ព្ទរបស់ខ្លួន រួច Scan QR នេះ។</p>
         </div>}
       </section>}
