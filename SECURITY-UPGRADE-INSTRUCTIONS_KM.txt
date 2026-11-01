@@ -1,0 +1,39 @@
+YOKI ATTENDANCE SECURITY UPGRADE
+
+អ្វីដែលបានបន្ថែម
+1. Employee ម្នាក់អាចមានឧបករណ៍ Approved តែមួយ។
+2. ឧបករណ៍ថ្មីរបស់ Staff ត្រូវរង់ចាំ Admin អនុម័ត។
+3. Admin មានផ្ទាំង Security សម្រាប់ Approve / Block ឧបករណ៍។
+4. មាន Security Logs សម្រាប់ឧបករណ៍ថ្មី និងការព្យាយាម Scan ពីឧបករណ៍មិនទាន់អនុម័ត។
+5. មិនមាន Selfie ឬការថតរូបទេ។
+
+សូមអនុវត្តតាមលំដាប់នេះ
+
+STEP 1 — Backup
+- មុនធ្វើអ្វី សូមរក្សាទុក ZIP source បច្ចុប្បន្ន និងកុំលុប project ចាស់។
+- កុំ Run supabase/schema.sql ម្តងទៀត។ វាជា schema ចាស់ ហើយអាចប៉ះពាល់ការកំណត់ QR បច្ចុប្បន្ន។
+
+STEP 2 — Supabase Migration
+- បើក Supabase Project > SQL Editor > New Query។
+- បើកឯកសារ supabase/security_upgrade.sql ហើយ Copy SQL ទាំងអស់ទៅ SQL Editor។
+- ចុច Run។ Migration នេះបន្ថែមតែ tables/functions សម្រាប់ Security មិនលុបទិន្នន័យ Attendance/Employees ទេ។
+- វាមិនកែ QR expiry និងមិនកែ payroll logic ទេ។
+
+STEP 3 — Deploy frontend
+- Upload/replace files ក្នុង ZIP ទៅ GitHub repo branch main ដោយរក្សា Vercel Environment Variables ដដែល។
+- រង់ចាំ Vercel Deploy ជោគជ័យ។
+- Login ជា Admin ហើយចូលផ្ទាំង Security ដើម្បីពិនិត្យឧបករណ៍។ Admin device នឹង auto-approved។
+- Staff device ថ្មីនឹងបង្ហាញជា Pending។ Admin ចុច Approve។ បន្ទាប់មក Staff អាច Scan បាន។
+
+STEP 4 — Close legacy RPC bypass (សំខាន់)
+- ធ្វើតែបន្ទាប់ពីបាន Deploy frontend ថ្មី ហើយបានបញ្ជាក់ថា QR scan ដំណើរការតាម RPC ថ្មី។
+- ក្នុង Supabase SQL Editor Run statements ខាងក្រោម៖
+
+revoke all on function public.record_attendance_scan(text,double precision,double precision,integer) from public;
+revoke all on function public.record_attendance_scan(text,double precision,double precision,integer) from authenticated;
+
+ចំណាំសុវត្ថិភាព
+- Device ID ត្រូវបានរក្សាទុកក្នុង Browser localStorage។ វាជាវិធានការកាត់បន្ថយការខ្ចីគណនី មិនមែន Hardware ID ដែលមិនអាចចម្លងបានទេ។ បើបុគ្គលិក Clear browser data ឬប្តូរទូរស័ព្ទ វានឹងបង្កើត Device ថ្មី ហើយត្រូវ Admin អនុម័តម្ដងទៀត។
+- Device binding មិនអាចទប់ស្កាត់ការចម្លង Device ID ដោយអ្នកមានជំនាញបាន 100% ទេ។
+- QR scanner/camera code, GPS radius, shift, grace period, late deduction និង attendance table មិនត្រូវបានកែប្រែដោយ patch នេះទេ។
+- បើ SQL មាន error សូមកុំបន្តទៅ Step 3/4។ ផ្ញើរូប Error មកពិនិត្យសិន។

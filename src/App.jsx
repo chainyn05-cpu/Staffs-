@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { MapPin, ScanLine, Clock3, Users, Wallet, LogOut, ShieldCheck, QrCode } from 'lucide-react';
+import { MapPin, ScanLine, Clock3, Users, Wallet, LogOut, ShieldCheck, QrCode, Smartphone, ShieldAlert } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 const url = import.meta.env.VITE_SUPABASE_URL;
@@ -25,6 +25,10 @@ export default function App() {
   const [sharedQrPayload, setSharedQrPayload] = useState('');
   const [sharedQrExpiresAt, setSharedQrExpiresAt] = useState('');
   const [creatingQr, setCreatingQr] = useState(false);
+  const [deviceId, setDeviceId] = useState('');
+  const [deviceStatus, setDeviceStatus] = useState('checking');
+  const [securityDevices, setSecurityDevices] = useState([]);
+  const [securityEvents, setSecurityEvents] = useState([]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -66,6 +70,7 @@ export default function App() {
   useEffect(() => {
     if (!profile || !supabase) return;
     loadData();
+    registerThisDevice();
   }, [profile, month]);
 
   async function loadData() {
@@ -77,6 +82,12 @@ export default function App() {
     if (profile?.role === 'admin') {
       const r = await supabase.from('employees').select('*, branches(name)').order('full_name');
       if (!r.error) setStaff(r.data || []);
+      const [d,e] = await Promise.all([
+        supabase.from('employee_devices').select('id,employee_id,device_label,user_agent,status,first_seen_at,last_seen_at,employees(full_name,employee_code)').order('last_seen_at',{ascending:false}),
+        supabase.from('attendance_security_events').select('id,event_type,severity,details,device_id,created_at,employees(full_name,employee_code)').order('created_at',{ascending:false}).limit(100)
+      ]);
+      if (!d.error) setSecurityDevices(d.data || []);
+      if (!e.error) setSecurityEvents(e.data || []);
     }
   }
 
@@ -94,6 +105,43 @@ export default function App() {
     setBusy(false); if(error) setStatus('Employee ID ឬ PIN មិនត្រឹមត្រូវ ឬគណនីមិនទាន់បង្កើត');
   }
   async function logout() { await supabase?.auth.signOut(); setProfile(null); }
+
+
+  function getOrCreateDeviceId() {
+    let id = localStorage.getItem('yoki_attendance_device_id');
+    if (!id) {
+      id = (globalThis.crypto?.randomUUID?.() || `yoki-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      localStorage.setItem('yoki_attendance_device_id', id);
+    }
+    return id;
+  }
+
+  async function registerThisDevice() {
+    if (!profile || !supabase) return;
+    setDeviceStatus('checking');
+    try {
+      const id = getOrCreateDeviceId();
+      setDeviceId(id);
+      const label = `${navigator.platform || 'Unknown platform'} · ${(navigator.userAgent || '').slice(0,90)}`;
+      const {data,error} = await supabase.rpc('register_attendance_device', {
+        p_device_id: id, p_device_label: label, p_user_agent: navigator.userAgent || ''
+      });
+      if (error) throw error;
+      setDeviceStatus(data?.status || 'pending');
+      if (data?.status === 'pending') setStatus('ឧបករណ៍នេះកំពុងរង់ចាំ Admin អនុម័ត មុនពេល Scan Attendance។');
+      else if (data?.status === 'blocked') setStatus('ឧបករណ៍នេះត្រូវបាន Block។ សូមទាក់ទង Admin។');
+    } catch (e) {
+      setDeviceStatus('error');
+      setStatus(`Device Security: ${e.message || 'មិនអាចចុះឈ្មោះឧបករណ៍បាន'}`);
+    }
+  }
+
+  async function setDeviceApproval(rowId, nextStatus) {
+    const {error} = await supabase.rpc('admin_set_attendance_device', {p_device_row_id: rowId, p_status: nextStatus});
+    if (error) { setStatus(error.message); return; }
+    setStatus(nextStatus === 'approved' ? 'បានអនុម័តឧបករណ៍។' : 'បាន Block ឧបករណ៍។');
+    await loadData();
+  }
 
   async function createSharedQr() {
     if (!isAdmin) return;
@@ -120,15 +168,17 @@ export default function App() {
 
   async function submitScan(payload) {
     if (!supabase || !profile) return;
+    if (deviceStatus !== 'approved') { setStatus('ឧបករណ៍នេះមិនទាន់ត្រូវបាន Admin អនុម័តទេ។'); setQrOpen(false); return; }
     setBusy(true); setStatus('កំពុងផ្ទៀងផ្ទាត់ QR និង GPS...');
     try {
       const pos = await getPosition();
       const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
-      const {data,error} = await supabase.rpc('record_attendance_scan', {
+      const {data,error} = await supabase.rpc('record_attendance_scan_secure', {
         p_qr_token: parsed.token,
         p_lat: pos.lat,
         p_lng: pos.lng,
-        p_accuracy_m: Math.round(pos.accuracy)
+        p_accuracy_m: Math.round(pos.accuracy),
+        p_device_id: deviceId
       });
       if (error) throw error;
       setStatus(data?.message || 'បានរក្សាទុក Attendance');
@@ -156,14 +206,14 @@ export default function App() {
   return <div className="app">
     <aside className="sidebar"><div className="brand"><div className="logo">EA</div><div><b>YOKI ATTENDANCE</b><small>STAFF SYSTEM</small></div></div>
       <nav><button className={tab==='attendance'?'active':''} onClick={()=>setTab('attendance')}><ScanLine/> Attendance</button>
-      {isAdmin&&<><button className={tab==='staff'?'active':''} onClick={()=>setTab('staff')}><Users/> Employees</button><button className={tab==='qr'?'active':''} onClick={()=>setTab('qr')}><QrCode/> Shared QR</button><button className={tab==='payroll'?'active':''} onClick={()=>setTab('payroll')}><Wallet/> Payroll Report</button></>}</nav>
+      {isAdmin&&<><button className={tab==='staff'?'active':''} onClick={()=>setTab('staff')}><Users/> Employees</button><button className={tab==='qr'?'active':''} onClick={()=>setTab('qr')}><QrCode/> Shared QR</button><button className={tab==='security'?'active':''} onClick={()=>setTab('security')}><ShieldAlert/> Security</button><button className={tab==='payroll'?'active':''} onClick={()=>setTab('payroll')}><Wallet/> Payroll Report</button></>}</nav>
       <div className="side-bottom"><span><ShieldCheck size={16}/> {profile.role}</span><button className="logout" onClick={logout}><LogOut size={17}/> Logout</button></div>
     </aside>
     <main className="content">
-      <header><div><p className="eyebrow">YOKI COFFEE · YOKI STAFF SYSTEM</p><h1>{tab==='attendance'?'Attendance':tab==='staff'?'Employees':'Monthly Payroll'}</h1></div><div className="user"><span>{profile.full_name}</span><b>{profile.employee_code}</b></div></header>
+      <header><div><p className="eyebrow">YOKI COFFEE · YOKI STAFF SYSTEM</p><h1>{tab==='attendance'?'Attendance':tab==='staff'?'Employees':tab==='security'?'Device Security':tab==='qr'?'Shared QR':'Monthly Payroll'}</h1></div><div className="user"><span>{profile.full_name}</span><b>{profile.employee_code}</b></div></header>
       {status&&<div className="notice">{status}</div>}
       {tab==='attendance'&&<><section className="stats"><Stat icon={<Clock3/>} label="Grace Period" value="10 min"/><Stat icon={<Wallet/>} label="Late Rate" value="$1 / hour"/><Stat icon={<MapPin/>} label="GPS Check" value="Required"/></section>
-        <section className="panel scan-panel"><div><p className="eyebrow">TODAY'S YOKI ATTENDANCE</p><h2>ស្កេន QR Code ដើម្បីចូល / ចេញ</h2><p className="muted">សូមបើក Location និងអនុញ្ញាត Camera មុនពេល Scan។</p><button onClick={()=>setQrOpen(!qrOpen)} disabled={busy}><ScanLine size={18}/>{qrOpen?'បិទ Scanner':'Start QR Scanner'}</button></div><div className="scan-icon"><ScanLine size={58}/></div></section>
+        <section className="panel scan-panel"><div><p className="eyebrow">TODAY'S YOKI ATTENDANCE</p><h2>ស្កេន QR Code ដើម្បីចូល / ចេញ</h2><p className="muted">សូមបើក Location និងអនុញ្ញាត Camera មុនពេល Scan។</p><p className="muted">Device status: <b>{deviceStatus==='approved'?'Approved':deviceStatus==='pending'?'Pending Admin Approval':deviceStatus==='blocked'?'Blocked':'Checking...'}</b></p>{deviceStatus!=='approved'&&<button className="small-action" onClick={registerThisDevice}>Refresh Approval Status</button>}<button onClick={()=>setQrOpen(!qrOpen)} disabled={busy || deviceStatus !== 'approved'}><ScanLine size={18}/>{qrOpen?'បិទ Scanner':'Start QR Scanner'}</button></div><div className="scan-icon"><ScanLine size={58}/></div></section>
         {qrOpen&&<section className="panel"><div id="qr-reader"></div><p className="muted">ដាក់ QR Code របស់ហាងនៅក្នុងស៊ុម។</p></section>}
         <section className="panel"><div className="section-head"><h2>Attendance History</h2><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></div><AttendanceTable rows={records.filter(r=>isAdmin||r.employee_id===profile.id)} isAdmin={isAdmin}/></section>
       </>}
@@ -171,7 +221,7 @@ export default function App() {
       {tab==='qr'&&isAdmin&&<section className="panel">
         <p className="eyebrow">YOKI COFFEE · ADMIN ONLY</p>
         <h2>Shared Attendance QR Code</h2>
-        <p className="muted">បង្កើត QR មួយសម្រាប់បុគ្គលិកទាំងអស់ Scan នៅហាង។ QR នីមួយៗមានសុពលភាព 12 ម៉ោង ហើយការបង្កើត QR ថ្មីនឹងបិទ QR ចាស់។</p>
+        <p className="muted">បង្កើត QR មួយសម្រាប់បុគ្គលិកទាំងអស់ Scan នៅហាង។ QR នេះមានសុពលភាពរហូតដល់ Admin ប្តូរ QR ថ្មី។</p>
         <button onClick={createSharedQr} disabled={creatingQr}>{creatingQr?'កំពុងបង្កើត...':'Generate / Renew Shared QR'}</button>
         {sharedQrPayload&&<div className="shared-qr-card">
           <QRCodeSVG value={sharedQrPayload} size={280} level="H" includeMargin />
@@ -179,6 +229,15 @@ export default function App() {
           <p className="muted">សុពលភាព៖ រហូតដល់ Admin ប្តូរ QR</p>
           <p className="muted">បង្ហាញ QR នេះនៅហាង។ បុគ្គលិក Login ដោយ Employee ID + PIN នៅលើទូរស័ព្ទរបស់ខ្លួន រួច Scan QR នេះ។</p>
         </div>}
+      </section>}
+
+      {tab==='security'&&isAdmin&&<section className="panel">
+        <p className="eyebrow">ADMIN ONLY · DEVICE APPROVAL & SECURITY LOGS</p><h2>Employee Device Management</h2>
+        <p className="muted">បុគ្គលិកម្នាក់អាចមានឧបករណ៍ Approved តែមួយ។ ការចូលពីឧបករណ៍ថ្មីត្រូវរង់ចាំ Admin អនុម័ត។</p>
+        <div className="table-wrap"><table><thead><tr><th>Employee</th><th>Device</th><th>Status</th><th>Last Seen</th><th>Action</th></tr></thead><tbody>{securityDevices.length?securityDevices.map(d=><tr key={d.id}><td>{d.employees?.full_name||'—'}<br/><small>{d.employees?.employee_code||''}</small></td><td>{d.device_label||'Unknown device'}</td><td><span className={`pill device-${d.status}`}>{d.status}</span></td><td>{d.last_seen_at?new Date(d.last_seen_at).toLocaleString():'—'}</td><td>{d.status!=='approved'&&<button className="small-action" onClick={()=>setDeviceApproval(d.id,'approved')}>Approve</button>} {d.status!=='blocked'&&<button className="small-action danger-action" onClick={()=>setDeviceApproval(d.id,'blocked')}>Block</button>}</td></tr>):<tr><td colSpan="5" className="empty">មិនទាន់មានឧបករណ៍</td></tr>}</tbody></table></div>
+        <h2 className="security-subhead">Recent Security Events</h2>
+        <div className="table-wrap"><table><thead><tr><th>Time</th><th>Employee</th><th>Event</th><th>Severity</th><th>Details</th></tr></thead><tbody>{securityEvents.length?securityEvents.map(ev=><tr key={ev.id}><td>{new Date(ev.created_at).toLocaleString()}</td><td>{ev.employees?.full_name||'—'}</td><td>{ev.event_type}</td><td>{ev.severity}</td><td>{JSON.stringify(ev.details||{})}</td></tr>):<tr><td colSpan="5" className="empty">មិនទាន់មាន Security Events</td></tr>}</tbody></table></div>
+        <p className="muted">ចំណាំ៖ Device ID ត្រូវបានរក្សាទុកក្នុង Browser។ វាជាវិធានការទប់ស្កាត់កម្រិតដំបូង មិនមែន Hardware ID ដែលមិនអាចចម្លងបានទេ។</p>
       </section>}
       {tab==='payroll'&&<section className="panel"><div className="section-head"><div><h2>Monthly Deduction Summary</h2><p className="muted">សរុបសម្រាប់ខែ {month}</p></div><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></div><div className="payroll-total"><span>Total recorded deductions</span><strong>{money(totalDeduction)}</strong></div><AttendanceTable rows={records} isAdmin={true}/><p className="muted">ត្រូវពិនិត្យ និងអនុម័តមុនបញ្ចូលក្នុងប្រាក់ខែ។</p></section>}
       <footer>YOKI Coffee · Internal Staff System</footer>

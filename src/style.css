@@ -109,3 +109,4 @@
 #qr-reader video { width: 100% !important; object-fit: cover; }
 #qr-reader__scan_region { min-height: 220px; }
 #qr-reader__dashboard { padding: 10px 0; }
+.security-subhead{margin-top:28px!important}.small-action{padding:7px 10px;border-radius:7px;background:#e9f4ff;color:#185b96;font-size:11px;font-weight:700;margin:2px}.danger-action{background:#fff0ed;color:#bd3827}.device-approved{background:#eaf8f0;color:#23804c}.device-pending{background:#fff4e5;color:#9b6417}.device-blocked{background:#fff0ed;color:#bd3827}
