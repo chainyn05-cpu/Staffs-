@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { MapPin, ScanLine, Clock3, Users, Wallet, LogOut, ShieldCheck, QrCode } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -22,7 +22,6 @@ export default function App() {
   const [pin, setPin] = useState('');
   const [month, setMonth] = useState(new Date().toISOString().slice(0,7));
   const [qrOpen, setQrOpen] = useState(false);
-  const [cameraFacing, setCameraFacing] = useState('environment');
   const [sharedQrPayload, setSharedQrPayload] = useState('');
   const [sharedQrExpiresAt, setSharedQrExpiresAt] = useState('');
   const [creatingQr, setCreatingQr] = useState(false);
@@ -140,61 +139,10 @@ export default function App() {
 
   useEffect(() => {
     if (!qrOpen) return;
-    let scanner;
-    let cancelled = false;
-
-    const startScanner = async () => {
-      try {
-        scanner = new Html5Qrcode('qr-reader', { verbose: false });
-        const cameras = await Html5Qrcode.getCameras();
-        if (cancelled) return;
-        if (!cameras?.length) throw new Error('រកមិនឃើញកាមេរ៉ា');
-
-        const backCamera = cameras.find(camera => /back|rear|environment|trailing/i.test(camera.label));
-        const frontCamera = cameras.find(camera => /front|user|facetime|前/i.test(camera.label));
-        const selectedCamera = cameraFacing === 'environment'
-          ? (backCamera || cameras[cameras.length - 1])
-          : (frontCamera || cameras[0]);
-
-        setStatus('កំពុងបើកកាមេរ៉ា និងស្វែងរក QR Code...');
-        await scanner.start(
-          selectedCamera.id,
-          {
-            fps: 15,
-            qrbox: (viewWidth, viewHeight) => {
-              const side = Math.floor(Math.min(viewWidth, viewHeight) * 0.72);
-              return { width: Math.min(280, side), height: Math.min(280, side) };
-            },
-            aspectRatio: 1.0,
-            formatsToSupport: [Html5Qrcode.FORMATS.QR_CODE],
-            videoConstraints: {
-              facingMode: cameraFacing,
-              focusMode: 'continuous'
-            }
-          },
-          decodedText => {
-            if (cancelled) return;
-            setStatus('បានអាន QR Code! កំពុងផ្ទៀងផ្ទាត់...');
-            scanner.pause(true);
-            Promise.resolve(submitScan(decodedText)).finally(() => {
-              if (scanner?.isScanning) scanner.resume();
-            });
-          },
-          () => {}
-        );
-        if (!cancelled) setStatus('កាមេរ៉ាដំណើរការ។ សូមតម្រង់ទៅ QR Code។');
-      } catch (error) {
-        if (!cancelled) setStatus('មិនអាចចាប់ QR បាន៖ ' + (error?.message || 'សូមពិនិត្យ Camera Permission'));
-      }
-    };
-
-    startScanner();
-    return () => {
-      cancelled = true;
-      if (scanner?.isScanning) scanner.stop().catch(() => {});
-      scanner?.clear().catch(() => {});
-    };
-  }, [qrOpen, cameraFacing]);
+    const scanner = new Html5QrcodeScanner('qr-reader', {fps:10, qrbox:{width:230,height:230}}, false);
+    scanner.render(decoded => { scanner.clear().catch(()=>{}); submitScan(decoded); }, () => {});
+    return () => { scanner.clear().catch(()=>{}); };
+  }, [qrOpen]);
 
   const totalDeduction = useMemo(() => records.reduce((s,r)=>s+Number(r.deduction_amount||0),0),[records]);
   const isAdmin = profile?.role === 'admin';
@@ -216,15 +164,7 @@ export default function App() {
       {status&&<div className="notice">{status}</div>}
       {tab==='attendance'&&<><section className="stats"><Stat icon={<Clock3/>} label="Grace Period" value="10 min"/><Stat icon={<Wallet/>} label="Late Rate" value="$1 / hour"/><Stat icon={<MapPin/>} label="GPS Check" value="Required"/></section>
         <section className="panel scan-panel"><div><p className="eyebrow">TODAY'S YOKI ATTENDANCE</p><h2>ស្កេន QR Code ដើម្បីចូល / ចេញ</h2><p className="muted">សូមបើក Location និងអនុញ្ញាត Camera មុនពេល Scan។</p><button onClick={()=>setQrOpen(!qrOpen)} disabled={busy}><ScanLine size={18}/>{qrOpen?'បិទ Scanner':'Start QR Scanner'}</button></div><div className="scan-icon"><ScanLine size={58}/></div></section>
-        {qrOpen&&<section className="panel">
-          <div id="qr-reader"></div>
-          <div className="camera-actions">
-            <button type="button" className="secondary" onClick={()=>setCameraFacing(value=>value==='environment'?'user':'environment')}>
-              ប្តូរ {cameraFacing==='environment'?'ទៅកាមេរ៉ាមុខ':'ទៅកាមេរ៉ាក្រោយ'}
-            </button>
-          </div>
-          <p className="muted">ដាក់ QR Code របស់ហាងនៅក្នុងស៊ុម។ កាមេរ៉ាក្រោយត្រូវបានជ្រើសរើសជាលំនាំដើម។</p>
-        </section>}
+        {qrOpen&&<section className="panel"><div id="qr-reader"></div><p className="muted">ដាក់ QR Code របស់ហាងនៅក្នុងស៊ុម។</p></section>}
         <section className="panel"><div className="section-head"><h2>Attendance History</h2><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></div><AttendanceTable rows={records.filter(r=>isAdmin||r.employee_id===profile.id)} isAdmin={isAdmin}/></section>
       </>}
       {tab==='staff'&&<section className="panel"><h2>Employee Directory</h2><div className="table-wrap"><table><thead><tr><th>Employee</th><th>Code</th><th>Branch</th><th>Role</th><th>Salary</th></tr></thead><tbody>{staff.map(s=><tr key={s.id}><td>{s.full_name}</td><td>{s.employee_code}</td><td>{s.branches?.name}</td><td>{s.role}</td><td>{money(s.monthly_salary)}</td></tr>)}</tbody></table></div><p className="muted">បង្កើត / កែ Employee Account តាម Supabase Dashboard ក្នុងជំនាន់ Starter នេះ។</p></section>}
